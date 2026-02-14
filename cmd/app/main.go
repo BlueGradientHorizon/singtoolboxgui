@@ -1,6 +1,7 @@
 package main
 
 import (
+	singbox "github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/cores/sing-box"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/network/downloader"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/network/webserver"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/storage/basic_preferences"
@@ -19,11 +20,12 @@ func main() {
 	// fileExp := files.NewFyneExporter()
 	downloader := downloader.NewHttpDownloader()
 	// testerAdapter := tester.NewSingBoxTester()
+	coreAdapter := singbox.NewSingBoxCore()
 	webServer := webserver.NewWebServer()
 
 	// Services (Core)
 	subsService := services.NewSubscriptionsService(conf, downloader /*clip, fileExp,*/)
-	testService := services.NewTestService(conf /*testerAdapter, webServer*/)
+	testService := services.NewTestService(conf, coreAdapter /*testerAdapter, webServer*/)
 	webServerService := services.NewWebServerService(conf, webServer)
 
 	// Driving adapters

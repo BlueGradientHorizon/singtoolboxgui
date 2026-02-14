@@ -39,6 +39,19 @@ type WebServer interface {
 	IsRunning() bool
 }
 
+type CoreAdapter interface {
+	ValidateOutbound(outbound interface{}) error
+	CreateInstance(ctx context.Context, outbounds interface{}) (interface{}, error)
+	StartInstance(instance interface{}) error
+	CloseInstance(instance interface{}) error
+	GetOutbounds(instance interface{}) (interface{}, error)
+	GetOutboundsCount(outbounds interface{}) int
+	SliceOutbounds(outbounds interface{}, start, end int) interface{}
+	BuildOutboundsFromResults(results interface{}) interface{}
+	CreateLatencyTest(ctx context.Context, settings interface{}, outbounds interface{}) (interface{}, error)
+	RunLatencyTest(test interface{}, resChan chan<- interface{})
+}
+
 // Driving
 
 type SubscriptionsService interface {
