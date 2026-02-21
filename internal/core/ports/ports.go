@@ -57,7 +57,7 @@ type CoreAdapter interface {
 	SliceOutbounds(outbounds any, start, end int) any
 	// BuildOutboundsFromResults builds outbounds from latency test results
 	BuildOutboundsFromResults(results any) any
-	CreateLatencyTest(ctx context.Context, settings any, outbounds any) (any, error)
+	CreateLatencyTest(ctx context.Context, settings domain.LatencyTestSettings, outbounds any) (any, error)
 	RunLatencyTest(test any, resChan chan<- any)
 	// FindProfileByTag finds a profile by its config tag
 	FindProfileByTag(profiles []domain.ProxyProfile, tag string) *domain.ProxyProfile
@@ -75,6 +75,10 @@ type CoreAdapter interface {
 	GetResultError(result any) error
 	// MergeResultsMaps merges source map into destination
 	MergeResultsMaps(dst, src any)
+	// NewLatencyTestSettings creates default latency test settings
+	NewLatencyTestSettings() domain.LatencyTestSettings
+	// IterateResults iterates over results map and calls the callback for each result
+	IterateResults(resultsMap any, callback func(profile domain.ProxyProfile, tag string, delay int32) bool)
 }
 
 // Driving

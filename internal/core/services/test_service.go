@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bluegradienthorizon/singtoolbox/testers"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/common"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/core/domain"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/core/ports"
@@ -22,7 +21,7 @@ func NewTestService(
 	c ports.Configuration,
 	ca ports.CoreAdapter,
 ) *TestService {
-	// Select sing-box core from available cores
+	// TODO: remove hardcoded choice
 	cores := ca.GetSupportedCores()
 	for _, coreInfo := range cores {
 		if coreInfo.Name == "sing-box" {
@@ -117,7 +116,7 @@ func (s *TestService) GetTestParameters() domain.LatencyTestParameters {
 	rounds := s.config.RecheckRounds().Get()
 	timeoutSec := s.config.RoundTimeout().Get()
 
-	lts := testers.NewLatencyTestSettings()
+	lts := s.coreAdapter.NewLatencyTestSettings()
 	lts.Timeout = time.Duration(timeoutSec) * time.Second
 
 	return domain.LatencyTestParameters{
@@ -151,9 +150,7 @@ func (s *TestService) RunLatencyTest(testCtx context.Context, updateChans ...cha
 
 	totalWorkingProfilesMap := s.coreAdapter.CreateLatencyTestResultsMap()
 
-	lts := testers.NewLatencyTestSettings()
-	lts.TestURL = tp.LTSettings.TestURL
-	lts.Timeout = tp.LTSettings.Timeout
+	lts := tp.LTSettings
 
 	instanceOutboundsRaw, err := s.coreAdapter.GetOutbounds(instance)
 	if err != nil {
@@ -260,17 +257,15 @@ func (s *TestService) RunLatencyTest(testCtx context.Context, updateChans ...cha
 	for i := range subs {
 		subs[i].WorkingProfiles = nil
 		// Iterate through results map using adapter methods
-		// We need to cast to access the map
-		if resultsMap, ok := totalWorkingProfilesMap.(map[domain.ProxyProfile]testers.LatencyTestResult); ok {
-			for p, r := range resultsMap {
-				if strings.Contains(r.Tag, subs[i].ID) {
-					subs[i].WorkingProfiles = append(subs[i].WorkingProfiles, domain.Profile{
-						URI:     p.ConnURI,
-						Latency: int(r.Delay),
-					})
-				}
+		s.coreAdapter.IterateResults(totalWorkingProfilesMap, func(profile domain.ProxyProfile, tag string, delay int32) bool {
+			if strings.Contains(tag, subs[i].ID) {
+				subs[i].WorkingProfiles = append(subs[i].WorkingProfiles, domain.Profile{
+					URI:     profile.ConnURI,
+					Latency: int(delay),
+				})
 			}
-		}
+			return true
+		})
 	}
 
 	s.config.Subscriptions().Set(subs)

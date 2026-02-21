@@ -238,10 +238,10 @@ type LatencyTest struct {
 }
 
 // CreateLatencyTest creates a latency test with the given settings and outbounds
-func (s *STBCore) CreateLatencyTest(ctx context.Context, settings any, outbounds any) (any, error) {
-	lts, ok := settings.(testers.LatencyTestSettings)
-	if !ok {
-		return nil, fmt.Errorf("invalid settings type: expected testers.LatencyTestSettings")
+func (s *STBCore) CreateLatencyTest(ctx context.Context, settings domain.LatencyTestSettings, outbounds any) (any, error) {
+	lts := testers.LatencyTestSettings{
+		TestURL: settings.TestURL,
+		Timeout: settings.Timeout,
 	}
 
 	obs, ok := outbounds.([]core.Outbound)
@@ -358,4 +358,26 @@ func (s *STBCore) MergeResultsMaps(dst, src any) {
 		return
 	}
 	maps.Copy(dstMap, srcMap)
+}
+
+// NewLatencyTestSettings creates default latency test settings
+func (s *STBCore) NewLatencyTestSettings() domain.LatencyTestSettings {
+	lts := testers.NewLatencyTestSettings()
+	return domain.LatencyTestSettings{
+		TestURL: lts.TestURL,
+		Timeout: lts.Timeout,
+	}
+}
+
+// IterateResults iterates over results map and calls the callback for each result
+func (s *STBCore) IterateResults(resultsMap any, callback func(profile domain.ProxyProfile, tag string, delay int32) bool) {
+	rm, ok := resultsMap.(map[domain.ProxyProfile]testers.LatencyTestResult)
+	if !ok {
+		return
+	}
+	for p, r := range rm {
+		if !callback(p, r.Tag, r.Delay) {
+			break
+		}
+	}
 }
