@@ -69,8 +69,8 @@ func (s *TestService) validateSubscription(sub domain.Subscription) validateSubs
 	// Validate
 	var validSubProfiles []parsers.ProxyProfile
 	for i, p := range subProfiles {
-		p.Outbound.Tag = fmt.Sprintf("%s-outbound-%d", sub.ID, i)
-		err := s.coreAdapter.ValidateOutbound(p.Outbound)
+		p.Config.Tag = fmt.Sprintf("%s-outbound-%d", sub.ID, i)
+		err := s.coreAdapter.ValidateOutbound(p.Config)
 		if err != nil {
 			sub.ValidationErrors++
 			continue
@@ -222,7 +222,7 @@ func (s *TestService) RunLatencyTest(testCtx context.Context, updateChans ...cha
 				continue
 			}
 			// t2 := time.Now()
-			s.coreAdapter.RunLatencyTest(lt, resChan)
+			go s.coreAdapter.RunLatencyTest(lt, resChan)
 			// println("t2", time.Since(t2).Milliseconds())
 			common.SendChans(domain.LatencyTestUpdate{
 				Status:   domain.LTStatusRunning,
@@ -241,7 +241,7 @@ func (s *TestService) RunLatencyTest(testCtx context.Context, updateChans ...cha
 				if res.Error == nil {
 					success, fail = 1, 0
 					idx := slices.IndexFunc(s.validProfiles, func(p parsers.ProxyProfile) bool {
-						return p.Outbound.Tag == res.Tag
+						return p.Config.Tag == res.Tag
 					})
 					if idx != -1 {
 						roundWorkingProfilesMap[s.validProfiles[idx]] = res

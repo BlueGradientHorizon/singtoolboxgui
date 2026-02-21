@@ -40,16 +40,16 @@ type WebServer interface {
 }
 
 type CoreAdapter interface {
-	ValidateOutbound(outbound interface{}) error
-	CreateInstance(ctx context.Context, outbounds interface{}) (interface{}, error)
-	StartInstance(instance interface{}) error
-	CloseInstance(instance interface{}) error
-	GetOutbounds(instance interface{}) (interface{}, error)
-	GetOutboundsCount(outbounds interface{}) int
-	SliceOutbounds(outbounds interface{}, start, end int) interface{}
-	BuildOutboundsFromResults(results interface{}) interface{}
-	CreateLatencyTest(ctx context.Context, settings interface{}, outbounds interface{}) (interface{}, error)
-	RunLatencyTest(test interface{}, resChan chan<- interface{})
+	ValidateOutbound(outbound any) error
+	CreateInstance(ctx context.Context, outbounds any) (any, error)
+	StartInstance(instance any) error
+	CloseInstance(instance any) error
+	GetOutbounds(instance any) (any, error)
+	GetOutboundsCount(outbounds any) int
+	SliceOutbounds(outbounds any, start, end int) any
+	BuildOutboundsFromResults(results any) any
+	CreateLatencyTest(ctx context.Context, settings any, outbounds any) (any, error)
+	RunLatencyTest(test any, resChan chan<- any)
 }
 
 // Driving

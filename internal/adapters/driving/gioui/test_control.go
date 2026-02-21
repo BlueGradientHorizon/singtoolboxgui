@@ -29,10 +29,14 @@ func (g *GUI) StartTest() {
 	go g.TestService.RunLatencyTest(*g.TestCtx, updateChan)
 
 	animValueOverride, animStart, animStop, animEnd := g.StartProgressBar(tp.LTSettings.Timeout * time.Duration(tp.Batches) * time.Duration(tp.Rounds))
+	g.ProgressBarAnimEnd = animEnd
 	defer close(animValueOverride)
 	defer close(animStart)
 	defer close(animStop)
-	defer close(animEnd)
+	defer func() {
+		close(animEnd)
+		g.ProgressBarAnimEnd = nil
+	}()
 
 	type roundStats struct {
 		Running   int
@@ -172,6 +176,13 @@ func (g *GUI) StopTest() {
 		(*g.TestCtxCancel)()
 		g.TestCtx = nil
 		g.TestCtxCancel = nil
+	}
+	if g.ProgressBarAnimEnd != nil {
+		select {
+		case g.ProgressBarAnimEnd <- struct{}{}:
+		default:
+		}
+		g.ProgressBarAnimEnd = nil
 	}
 	g.Window.Invalidate()
 }

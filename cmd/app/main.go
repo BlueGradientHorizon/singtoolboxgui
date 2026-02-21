@@ -1,7 +1,8 @@
 package main
 
 import (
-	singbox "github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/cores/sing-box"
+	"github.com/bluegradienthorizon/singtoolbox/testrunner"
+	"github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/cores/stb"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/network/downloader"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/network/webserver"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/storage/basic_preferences"
@@ -14,13 +15,11 @@ func main() {
 	// a := app.NewWithID(appId)
 
 	// Driven adapters
-	// conf := fyne_preferences.NewFynePreferences(a.Preferences())
 	conf := basic_preferences.NewBasicPreferences(appId)
 	// clip := clipboard.NewFyneClipboard(a)
 	// fileExp := files.NewFyneExporter()
 	downloader := downloader.NewHttpDownloader()
-	// testerAdapter := tester.NewSingBoxTester()
-	coreAdapter := singbox.NewSingBoxCore()
+	coreAdapter := stb.NewSTBCore(testrunner.SingBoxCore)
 	webServer := webserver.NewWebServer()
 
 	// Services (Core)
@@ -29,10 +28,6 @@ func main() {
 	webServerService := services.NewWebServerService(conf, webServer)
 
 	// Driving adapters
-	// go func() {
-	// fyneUi := fyne_ui.NewGUI(a, subsService, testService, webServerService, conf)
-	// fyneUi.Run()
-	// }()
 	gioui := gioui.NewGUI(nil, subsService, testService, webServerService, conf /*passsing adapter - is it good/allowed/bad?*/)
 	gioui.Run()
 }

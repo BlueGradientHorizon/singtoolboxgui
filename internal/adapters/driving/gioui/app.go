@@ -68,6 +68,9 @@ type GUI struct {
 	TestCtx       *context.Context
 	TestCtxCancel *context.CancelFunc
 
+	// Progress bar control channels
+	ProgressBarAnimEnd chan<- struct{}
+
 	Explorer *explorer.Explorer
 }
 
