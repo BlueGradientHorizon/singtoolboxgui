@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/bluegradienthorizon/singtoolbox/testrunner"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/cores/stb"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/network/downloader"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/adapters/driven/network/webserver"
@@ -19,7 +18,7 @@ func main() {
 	// clip := clipboard.NewFyneClipboard(a)
 	// fileExp := files.NewFyneExporter()
 	downloader := downloader.NewHttpDownloader()
-	coreAdapter := stb.NewSTBCore(testrunner.SingBoxCore)
+	coreAdapter := stb.NewSTBCore()
 	webServer := webserver.NewWebServer()
 
 	// Services (Core)

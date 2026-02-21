@@ -3,12 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 	"time"
 
-	"github.com/bluegradienthorizon/singtoolbox/parsers"
 	"github.com/bluegradienthorizon/singtoolbox/testers"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/common"
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/core/domain"
@@ -18,13 +15,22 @@ import (
 type TestService struct {
 	config        ports.Configuration
 	coreAdapter   ports.CoreAdapter
-	validProfiles []parsers.ProxyProfile
+	validProfiles []domain.ProxyProfile
 }
 
 func NewTestService(
 	c ports.Configuration,
 	ca ports.CoreAdapter,
 ) *TestService {
+	// Select sing-box core from available cores
+	cores := ca.GetSupportedCores()
+	for _, coreInfo := range cores {
+		if coreInfo.Name == "sing-box" {
+			ca.SetActiveCore(coreInfo.Type)
+			break
+		}
+	}
+
 	return &TestService{
 		config:      c,
 		coreAdapter: ca,
@@ -32,32 +38,22 @@ func NewTestService(
 }
 
 type validateSubscriptionResult struct {
-	validProfiles    *[]parsers.ProxyProfile
+	validProfiles    *[]domain.ProxyProfile
 	parsingErrors    int
 	validationErrors int
 }
 
 func (s *TestService) validateSubscription(sub domain.Subscription) validateSubscriptionResult {
 	res := validateSubscriptionResult{}
-	// var sub *domain.Subscription = nil
 
-	// for _, subSearch := range subs {
-	// 	if subSearch.ID == ID {
-	// 		sub = &subSearch
-	// 	}
-	// }
-	// if sub == nil {
-	// 	return nil, errors.New("ValidateSubscription: ID not found")
-	// }
-
-	var validProfiles []parsers.ProxyProfile
+	var validProfiles []domain.ProxyProfile
 	var parsingErrors int
 	var validationErrors int
 
 	// Parse
-	var subProfiles []parsers.ProxyProfile
+	var subProfiles []domain.ProxyProfile
 	for _, u := range sub.ProfilesURIs {
-		p, err := parsers.ParseProfile(u)
+		p, err := s.coreAdapter.ParseProfile(u)
 		if err != nil {
 			sub.ParsingErrors++
 			continue
@@ -67,9 +63,10 @@ func (s *TestService) validateSubscription(sub domain.Subscription) validateSubs
 	parsingErrors += sub.ParsingErrors
 
 	// Validate
-	var validSubProfiles []parsers.ProxyProfile
+	var validSubProfiles []domain.ProxyProfile
 	for i, p := range subProfiles {
-		p.Config.Tag = fmt.Sprintf("%s-outbound-%d", sub.ID, i)
+		tag := fmt.Sprintf("%s-outbound-%d", sub.ID, i)
+		s.coreAdapter.SetProfileTag(&p, tag)
 		err := s.coreAdapter.ValidateOutbound(p.Config)
 		if err != nil {
 			sub.ValidationErrors++
@@ -88,7 +85,7 @@ func (s *TestService) validateSubscription(sub domain.Subscription) validateSubs
 }
 
 func (s *TestService) ValidateSubscriptions() int {
-	var validProfiles []parsers.ProxyProfile
+	var validProfiles []domain.ProxyProfile
 	parsingErrorsTotal, validationErrorsTotal := 0, 0
 
 	subs := s.config.Subscriptions().Get()
@@ -152,7 +149,7 @@ func (s *TestService) RunLatencyTest(testCtx context.Context, updateChans ...cha
 
 	tp := s.GetTestParameters()
 
-	totalWorkingProfilesMap := make(map[parsers.ProxyProfile]testers.LatencyTestResult)
+	totalWorkingProfilesMap := s.coreAdapter.CreateLatencyTestResultsMap()
 
 	lts := testers.NewLatencyTestSettings()
 	lts.TestURL = tp.LTSettings.TestURL
@@ -167,7 +164,7 @@ func (s *TestService) RunLatencyTest(testCtx context.Context, updateChans ...cha
 		start := iB * tp.BatchSize
 		end := min(start+tp.BatchSize, s.coreAdapter.GetOutboundsCount(instanceOutboundsRaw))
 		batchAdapterOutbounds := s.coreAdapter.SliceOutbounds(instanceOutboundsRaw, start, end)
-		batchWorkingProfilesMap := make(map[parsers.ProxyProfile]testers.LatencyTestResult)
+		batchWorkingProfilesMap := s.coreAdapter.CreateLatencyTestResultsMap()
 
 		for iR := range tp.Rounds {
 			if testCtx.Err() != nil {
@@ -182,10 +179,6 @@ func (s *TestService) RunLatencyTest(testCtx context.Context, updateChans ...cha
 			batchValue := float64(1) / float64(tp.Batches) * float64(iB)
 			roundValue := float64(1) / float64(tp.Rounds) * float64(iR)
 			curProgressValue := batchValue + singleBatchValue*roundValue
-			// println(fmt.Sprintf("singleBatchValue %.2f", singleBatchValue))
-			// println(fmt.Sprintf("batchValue %.2f", batchValue))
-			// println(fmt.Sprintf("roundValue %.2f", roundValue))
-			// println(fmt.Sprintf("curProgressValue %.2f", curProgressValue))
 
 			common.SendChans(domain.LatencyTestUpdate{
 				Status: domain.LTStatusWaiting,
@@ -203,9 +196,7 @@ func (s *TestService) RunLatencyTest(testCtx context.Context, updateChans ...cha
 			}, updateChans...)
 
 			resChan := make(chan interface{}, s.coreAdapter.GetOutboundsCount(batchAdapterOutbounds))
-			// t1 := time.Now()
 			lt, err := s.coreAdapter.CreateLatencyTest(testCtx, lts, batchAdapterOutbounds)
-			// println("t1", time.Since(t1).Milliseconds())
 			if err != nil {
 				common.SendChans(domain.LatencyTestUpdate{
 					Status:   domain.LTStatusWaiting,
@@ -221,30 +212,26 @@ func (s *TestService) RunLatencyTest(testCtx context.Context, updateChans ...cha
 				}, updateChans...)
 				continue
 			}
-			// t2 := time.Now()
 			go s.coreAdapter.RunLatencyTest(lt, resChan)
-			// println("t2", time.Since(t2).Milliseconds())
 			common.SendChans(domain.LatencyTestUpdate{
 				Status:   domain.LTStatusRunning,
 				Progress: nil,
 				Info:     nil,
 			}, updateChans...)
 
-			roundWorkingProfilesMap := make(map[parsers.ProxyProfile]testers.LatencyTestResult)
+			roundWorkingProfilesMap := s.coreAdapter.CreateLatencyTestResultsMap()
 
 			processed := 0
 			for processed < s.coreAdapter.GetOutboundsCount(batchAdapterOutbounds) {
 				resRaw := <-resChan
-				res := resRaw.(testers.LatencyTestResult)
 				processed++
 				success, fail := 0, 1
-				if res.Error == nil {
+				if s.coreAdapter.GetResultError(resRaw) == nil {
 					success, fail = 1, 0
-					idx := slices.IndexFunc(s.validProfiles, func(p parsers.ProxyProfile) bool {
-						return p.Config.Tag == res.Tag
-					})
-					if idx != -1 {
-						roundWorkingProfilesMap[s.validProfiles[idx]] = res
+					tag := s.coreAdapter.GetResultTag(resRaw)
+					profile := s.coreAdapter.FindProfileByTag(s.validProfiles, tag)
+					if profile != nil {
+						s.coreAdapter.AddToResultsMap(roundWorkingProfilesMap, *profile, resRaw)
 					}
 				}
 				common.SendChans(domain.LatencyTestUpdate{
@@ -263,27 +250,31 @@ func (s *TestService) RunLatencyTest(testCtx context.Context, updateChans ...cha
 
 			batchAdapterOutbounds = s.coreAdapter.BuildOutboundsFromResults(roundWorkingProfilesMap)
 			batchWorkingProfilesMap = roundWorkingProfilesMap
-			println(fmt.Sprintf("iR %d %d", iR, len(roundWorkingProfilesMap)))
+			println(fmt.Sprintf("iR %d %d", iR, s.coreAdapter.GetResultsCount(roundWorkingProfilesMap)))
 		}
 
-		maps.Copy(totalWorkingProfilesMap, batchWorkingProfilesMap)
+		s.coreAdapter.MergeResultsMaps(totalWorkingProfilesMap, batchWorkingProfilesMap)
 	}
 
 	subs := s.config.Subscriptions().Get()
 	for i := range subs {
 		subs[i].WorkingProfiles = nil
-		for p, r := range totalWorkingProfilesMap {
-			if strings.Contains(r.Tag, subs[i].ID) {
-				subs[i].WorkingProfiles = append(subs[i].WorkingProfiles, domain.Profile{
-					URI:     p.ConnURI,
-					Latency: int(r.Delay),
-				})
+		// Iterate through results map using adapter methods
+		// We need to cast to access the map
+		if resultsMap, ok := totalWorkingProfilesMap.(map[domain.ProxyProfile]testers.LatencyTestResult); ok {
+			for p, r := range resultsMap {
+				if strings.Contains(r.Tag, subs[i].ID) {
+					subs[i].WorkingProfiles = append(subs[i].WorkingProfiles, domain.Profile{
+						URI:     p.ConnURI,
+						Latency: int(r.Delay),
+					})
+				}
 			}
 		}
 	}
 
 	s.config.Subscriptions().Set(subs)
-	s.config.WorkingProfilesTotal().Set(len(totalWorkingProfilesMap))
+	s.config.WorkingProfilesTotal().Set(s.coreAdapter.GetResultsCount(totalWorkingProfilesMap))
 
 	common.SendChans(domain.LatencyTestUpdate{
 		Status: domain.LTStatusFinished,

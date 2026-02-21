@@ -7,7 +7,6 @@ require (
 	gioui.org/x v0.9.1-0.20260105145639-4117bfc0bd82
 	github.com/bluegradienthorizon/singtoolbox v0.0.7
 	github.com/google/uuid v1.6.0
-	github.com/sagernet/sing-box v1.12.22
 	golang.org/x/exp/shiny v0.0.0-20260218203240-3dfff04db8fa
 )
 
@@ -126,6 +125,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-text/typesetting v0.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.1-0.20230522191255-76236955d466 // indirect
+	github.com/sagernet/sing-box v1.12.22 // indirect
 	golang.org/x/image v0.36.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect

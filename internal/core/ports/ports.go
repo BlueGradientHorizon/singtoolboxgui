@@ -40,16 +40,41 @@ type WebServer interface {
 }
 
 type CoreAdapter interface {
+	GetSupportedCores() []domain.CoreInfo
+	SetActiveCore(coreType any) error
+	// ParseProfile parses a connection URI into a ProxyProfile
+	ParseProfile(connURI string) (*domain.ProxyProfile, error)
+	// SetProfileTag sets a unique tag on the profile's config
+	SetProfileTag(profile *domain.ProxyProfile, tag string)
+	// ValidateOutbound validates a single outbound configuration
 	ValidateOutbound(outbound any) error
-	CreateInstance(ctx context.Context, outbounds any) (any, error)
+	// CreateInstance creates a test runner instance with the given profiles
+	CreateInstance(ctx context.Context, profiles []domain.ProxyProfile) (any, error)
 	StartInstance(instance any) error
 	CloseInstance(instance any) error
 	GetOutbounds(instance any) (any, error)
 	GetOutboundsCount(outbounds any) int
 	SliceOutbounds(outbounds any, start, end int) any
+	// BuildOutboundsFromResults builds outbounds from latency test results
 	BuildOutboundsFromResults(results any) any
 	CreateLatencyTest(ctx context.Context, settings any, outbounds any) (any, error)
 	RunLatencyTest(test any, resChan chan<- any)
+	// FindProfileByTag finds a profile by its config tag
+	FindProfileByTag(profiles []domain.ProxyProfile, tag string) *domain.ProxyProfile
+	// CreateLatencyTestResultsMap creates a new results map for latency tests
+	CreateLatencyTestResultsMap() any
+	// AddToResultsMap adds a result to the results map
+	AddToResultsMap(resultsMap any, profile domain.ProxyProfile, result any)
+	// GetResultsCount returns the count of results in the results map
+	GetResultsCount(resultsMap any) int
+	// GetResultTag gets the tag from a latency test result
+	GetResultTag(result any) string
+	// GetResultDelay gets the delay from a latency test result
+	GetResultDelay(result any) int32
+	// GetResultError gets the error from a latency test result
+	GetResultError(result any) error
+	// MergeResultsMaps merges source map into destination
+	MergeResultsMaps(dst, src any)
 }
 
 // Driving

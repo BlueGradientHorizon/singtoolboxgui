@@ -15,6 +15,12 @@ type Profile struct {
 	Latency int    `json:"latency"`
 }
 
+// ProxyProfile represents a generic proxy profile with its configuration and connection URI
+type ProxyProfile struct {
+	Config  any    // Core-specific outbound configuration
+	ConnURI string // Original connection URI
+}
+
 type Subscription struct {
 	ID               string    `json:"id"`
 	Note             string    `json:"note"`
@@ -69,4 +75,10 @@ type LatencyTestUpdate struct {
 	Status   LatencyTestStatusUpdate
 	Progress *LatencyTestProgressUpdate
 	Info     *LatencyTestInfoUpdate
+}
+
+type CoreInfo struct {
+	Name    string
+	Version string
+	Type    any
 }

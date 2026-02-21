@@ -3,25 +3,69 @@ package stb
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/bluegradienthorizon/singtoolbox/core"
 	"github.com/bluegradienthorizon/singtoolbox/parsers"
 	"github.com/bluegradienthorizon/singtoolbox/testers"
 	"github.com/bluegradienthorizon/singtoolbox/testrunner"
+	"github.com/bluegradienthorizon/singtoolboxgui/internal/core/domain"
 )
 
 // STBCore implements CoreAdapter using singtoolbox's testrunner API
 type STBCore struct {
 	instance  *testrunner.TestRunner
 	outbounds []core.Outbound
-	profiles  []parsers.ProxyProfile
+	profiles  []domain.ProxyProfile
 	coreType  testrunner.CoreType
 }
 
-// NewSTBCore creates a new STBCore adapter with the specified core type
-func NewSTBCore(coreType testrunner.CoreType) *STBCore {
-	return &STBCore{
-		coreType: coreType,
+// NewSTBCore creates a new STBCore adapter without a core type.
+// SetActiveCore must be called before using the adapter.
+func NewSTBCore() *STBCore {
+	return &STBCore{}
+}
+
+// GetSupportedCores returns a list of all supported proxy cores
+func (s *STBCore) GetSupportedCores() []domain.CoreInfo {
+	cores := testrunner.GetSupportedCores()
+	result := make([]domain.CoreInfo, len(cores))
+	for i, c := range cores {
+		result[i] = domain.CoreInfo{
+			Name:    c.Name,
+			Version: c.Version,
+			Type:    c.Type,
+		}
+	}
+	return result
+}
+
+// SetActiveCore sets the active core type to use for testing
+func (s *STBCore) SetActiveCore(coreType any) error {
+	ct, ok := coreType.(testrunner.CoreType)
+	if !ok {
+		return fmt.Errorf("invalid core type: expected testrunner.CoreType")
+	}
+	s.coreType = ct
+	return nil
+}
+
+// ParseProfile parses a connection URI into a ProxyProfile
+func (s *STBCore) ParseProfile(connURI string) (*domain.ProxyProfile, error) {
+	p, err := parsers.ParseProfile(connURI)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.ProxyProfile{
+		Config:  p.Config,
+		ConnURI: p.ConnURI,
+	}, nil
+}
+
+// SetProfileTag sets a unique tag on the profile's config
+func (s *STBCore) SetProfileTag(profile *domain.ProxyProfile, tag string) {
+	if config, ok := profile.Config.(*core.OutboundConfig); ok {
+		config.Tag = tag
 	}
 }
 
@@ -63,12 +107,26 @@ func (s *STBCore) ValidateOutbound(outbound any) error {
 	return nil
 }
 
-// CreateInstance creates a new test runner instance with the given profiles
-func (s *STBCore) CreateInstance(ctx context.Context, outbounds any) (any, error) {
-	profiles, ok := outbounds.([]parsers.ProxyProfile)
-	if !ok {
-		return nil, fmt.Errorf("invalid outbounds type: expected []parsers.ProxyProfile")
+// toSTBProfile converts a domain.ProxyProfile to parsers.ProxyProfile
+func toSTBProfile(p domain.ProxyProfile) parsers.ProxyProfile {
+	return parsers.ProxyProfile{
+		Config:  p.Config.(*core.OutboundConfig),
+		ConnURI: p.ConnURI,
 	}
+}
+
+// toSTBProfiles converts []domain.ProxyProfile to []parsers.ProxyProfile
+func toSTBProfiles(profiles []domain.ProxyProfile) []parsers.ProxyProfile {
+	result := make([]parsers.ProxyProfile, len(profiles))
+	for i, p := range profiles {
+		result[i] = toSTBProfile(p)
+	}
+	return result
+}
+
+// CreateInstance creates a new test runner instance with the given profiles
+func (s *STBCore) CreateInstance(ctx context.Context, profiles []domain.ProxyProfile) (any, error) {
+	domainProfiles := profiles
 
 	runner, err := testrunner.NewTestRunner(testrunner.TestRunnerConfig{
 		CoreType:    s.coreType,
@@ -79,8 +137,11 @@ func (s *STBCore) CreateInstance(ctx context.Context, outbounds any) (any, error
 		return nil, fmt.Errorf("failed to create test runner: %w", err)
 	}
 
+	// Convert domain profiles to STB profiles
+	stbProfiles := toSTBProfiles(domainProfiles)
+
 	// Create core with profiles
-	validationErrors, err := runner.CreateCore(ctx, profiles)
+	validationErrors, err := runner.CreateCore(ctx, stbProfiles)
 	if err != nil {
 		runner.Close()
 		return nil, fmt.Errorf("failed to create core: %w", err)
@@ -94,7 +155,7 @@ func (s *STBCore) CreateInstance(ctx context.Context, outbounds any) (any, error
 	}
 
 	s.instance = runner
-	s.profiles = profiles
+	s.profiles = domainProfiles
 	s.outbounds = runner.GetOutbounds()
 
 	return runner, nil
@@ -151,7 +212,7 @@ func (s *STBCore) SliceOutbounds(outbounds any, start, end int) any {
 
 // BuildOutboundsFromResults builds outbounds slice from test results
 func (s *STBCore) BuildOutboundsFromResults(results any) any {
-	resultsMap, ok := results.(map[parsers.ProxyProfile]testers.LatencyTestResult)
+	resultsMap, ok := results.(map[domain.ProxyProfile]testers.LatencyTestResult)
 	if !ok {
 		return []core.Outbound{}
 	}
@@ -218,4 +279,83 @@ func (s *STBCore) RunLatencyTest(test any, resChan chan<- any) {
 		default:
 		}
 	}
+}
+
+// FindProfileByTag finds a profile by its config tag
+func (s *STBCore) FindProfileByTag(profiles []domain.ProxyProfile, tag string) *domain.ProxyProfile {
+	for i, p := range profiles {
+		if config, ok := p.Config.(*core.OutboundConfig); ok {
+			if config.Tag == tag {
+				return &profiles[i]
+			}
+		}
+	}
+	return nil
+}
+
+// CreateLatencyTestResultsMap creates a new results map for latency tests
+func (s *STBCore) CreateLatencyTestResultsMap() any {
+	return make(map[domain.ProxyProfile]testers.LatencyTestResult)
+}
+
+// AddToResultsMap adds a result to the results map
+func (s *STBCore) AddToResultsMap(resultsMap any, profile domain.ProxyProfile, result any) {
+	rm, ok := resultsMap.(map[domain.ProxyProfile]testers.LatencyTestResult)
+	if !ok {
+		return
+	}
+	res, ok := result.(testers.LatencyTestResult)
+	if !ok {
+		return
+	}
+	rm[profile] = res
+}
+
+// GetResultsCount returns the count of results in the results map
+func (s *STBCore) GetResultsCount(resultsMap any) int {
+	rm, ok := resultsMap.(map[domain.ProxyProfile]testers.LatencyTestResult)
+	if !ok {
+		return 0
+	}
+	return len(rm)
+}
+
+// GetResultTag gets the tag from a latency test result
+func (s *STBCore) GetResultTag(result any) string {
+	res, ok := result.(testers.LatencyTestResult)
+	if !ok {
+		return ""
+	}
+	return res.Tag
+}
+
+// GetResultDelay gets the delay from a latency test result
+func (s *STBCore) GetResultDelay(result any) int32 {
+	res, ok := result.(testers.LatencyTestResult)
+	if !ok {
+		return 0
+	}
+	return res.Delay
+}
+
+// GetResultError gets the error from a latency test result
+func (s *STBCore) GetResultError(result any) error {
+	res, ok := result.(testers.LatencyTestResult)
+	if !ok {
+		return nil
+	}
+	return res.Error
+}
+
+// MergeResultsMaps merges source map into destination
+func (s *STBCore) MergeResultsMaps(dst, src any) {
+	dstMap, ok := dst.(map[domain.ProxyProfile]testers.LatencyTestResult)
+	if !ok {
+		return
+	}
+	srcMap, ok := src.(map[domain.ProxyProfile]testers.LatencyTestResult)
+	if !ok {
+		return
+	}
+	maps.Copy(dstMap, srcMap)
 }
