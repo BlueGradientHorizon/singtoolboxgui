@@ -1,5 +1,3 @@
-# Build Process
-
 When testing if the project is buildable or running build commands:
 
 - On Windows: Use `.\build.bat`

@@ -126,6 +126,8 @@ require (
 	github.com/go-text/typesetting v0.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.1-0.20230522191255-76236955d466 // indirect
 	github.com/sagernet/sing-box v1.12.22 // indirect
+	github.com/yeqown/go-qrcode/v2 v2.2.5 // indirect
+	github.com/yeqown/reedsolomon v1.0.0 // indirect
 	golang.org/x/image v0.36.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect

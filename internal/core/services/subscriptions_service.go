@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bluegradienthorizon/singtoolboxgui/internal/common"
@@ -34,61 +35,81 @@ func (s *SubscriptionsService) DownloadSubscriptions(timeout time.Duration, upda
 	subs := s.config.Subscriptions().Get()
 	dedupEnabled := s.config.DedupEnabled().Get() // Check config
 
+	// Semaphore to limit concurrent downloads to 10
+	sem := make(chan struct{}, 10)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
 	for i := range subs {
-		res := domain.DownloadSubscriptionResult{Index: i, Success: false}
-		content, err := s.downloader.Download(subs[i].URL, timeout)
-		if err != nil {
-			common.SendChans(res, updateChans...)
-			continue
-		}
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
 
-		if decoded, err := base64.StdEncoding.DecodeString(content); err == nil {
-			content = string(decoded)
-		} else if decoded, err := base64.RawStdEncoding.DecodeString(content); err == nil {
-			content = string(decoded)
-		}
+			// Acquire semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
-		lines := strings.Split(content, "\n")
-		var validURIs []string
-
-		// Map to track unique URIs within this subscription
-		seen := make(map[string]bool)
-
-		for _, l := range lines {
-			l = strings.TrimSpace(l)
-			if strings.Contains(l, "://") && !strings.HasPrefix(l, "#") {
-
-				// Deduplication Logic
-				if dedupEnabled {
-					key := l
-					// Calculate comparison key: ignore '#' if it appears after '?'
-					qIdx := strings.Index(key, "?")
-					startSearch := 0
-					if qIdx != -1 {
-						startSearch = qIdx
-					}
-
-					// Find first '#' starting from after the query parameters
-					if hIdx := strings.Index(key[startSearch:], "#"); hIdx != -1 {
-						key = key[:startSearch+hIdx]
-					}
-
-					// If we have seen this key before, skip adding the real URI
-					if seen[key] {
-						profilesDuplicated++
-						continue
-					}
-					seen[key] = true
-				}
-
-				validURIs = append(validURIs, l)
+			res := domain.DownloadSubscriptionResult{Index: idx, Success: false}
+			content, err := s.downloader.Download(subs[idx].URL, timeout)
+			if err != nil {
+				common.SendChans(res, updateChans...)
+				return
 			}
-		}
-		subs[i].ProfilesURIs = validURIs
-		profilesFound += len(validURIs)
-		res.Success = true
-		common.SendChans(res, updateChans...)
+
+			if decoded, err := base64.StdEncoding.DecodeString(content); err == nil {
+				content = string(decoded)
+			} else if decoded, err := base64.RawStdEncoding.DecodeString(content); err == nil {
+				content = string(decoded)
+			}
+
+			lines := strings.Split(content, "\n")
+			var validURIs []string
+
+			// Map to track unique URIs within this subscription
+			seen := make(map[string]bool)
+
+			for _, l := range lines {
+				l = strings.TrimSpace(l)
+				if strings.Contains(l, "://") && !strings.HasPrefix(l, "#") {
+
+					// Deduplication Logic
+					if dedupEnabled {
+						key := l
+						// Calculate comparison key: ignore '#' if it appears after '?'
+						qIdx := strings.Index(key, "?")
+						startSearch := 0
+						if qIdx != -1 {
+							startSearch = qIdx
+						}
+
+						// Find first '#' starting from after the query parameters
+						if hIdx := strings.Index(key[startSearch:], "#"); hIdx != -1 {
+							key = key[:startSearch+hIdx]
+						}
+
+						// If we have seen this key before, skip adding the real URI
+						if seen[key] {
+							mu.Lock()
+							profilesDuplicated++
+							mu.Unlock()
+							continue
+						}
+						seen[key] = true
+					}
+
+					validURIs = append(validURIs, l)
+				}
+			}
+			subs[idx].ProfilesURIs = validURIs
+			mu.Lock()
+			profilesFound += len(validURIs)
+			mu.Unlock()
+			res.Success = true
+			common.SendChans(res, updateChans...)
+		}(i)
 	}
+
+	wg.Wait()
 
 	s.config.ProfilesFoundTotal().Set(profilesFound)
 	s.config.ProfilesDuplicatedTotal().Set(profilesDuplicated)

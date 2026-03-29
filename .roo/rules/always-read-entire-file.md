@@ -1,0 +1,1 @@
+You should ALWAYS read entire contents of files.
